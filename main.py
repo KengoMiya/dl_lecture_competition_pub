@@ -10,6 +10,11 @@ import torch
 import torch.nn as nn
 import torchvision
 from torchvision import transforms
+import nltk
+nltk.download('wordnet')
+nltk.download('stopwords')
+from nltk.stem import PorterStemmer
+from nltk.corpus import stopwords
 
 
 def set_seed(seed):
@@ -58,8 +63,16 @@ def process_text(text):
     # 連続するスペースを1つに変換
     text = re.sub(r'\s+', ' ', text).strip()
 
-    return text
+    # ステミング
+    stemmer = PorterStemmer()
+    text = ' '.join([stemmer.stem(word) for word in text.split()])
 
+    # ストップワードの削除
+    stop_words = set(stopwords.words('english'))
+    text = ' '.join([word for word in text.split() if word not in stop_words])
+
+
+    return text
 
 # 1. データローダーの作成
 class VQADataset(torch.utils.data.Dataset):
@@ -131,7 +144,7 @@ class VQADataset(torch.utils.data.Dataset):
         image = Image.open(f"{self.image_dir}/{self.df['image'][idx]}")
         image = self.transform(image)
         question = np.zeros(len(self.idx2question) + 1)  # 未知語用の要素を追加
-        question_words = self.df["question"][idx].split(" ")
+        question_words = process_text(self.df["question"][idx])
         for word in question_words:
             try:
                 question[self.question2idx[word]] = 1  # one-hot表現に変換
@@ -378,7 +391,7 @@ def main():
     model = VQAModel(vocab_size=len(train_dataset.question2idx)+1, n_answer=len(train_dataset.answer2idx)).to(device)
 
     # optimizer / criterion
-    num_epoch = 20
+    num_epoch = 2
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
 
