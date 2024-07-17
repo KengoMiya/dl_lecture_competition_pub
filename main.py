@@ -26,8 +26,7 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-
-def process_text(text):
+def process_text_question(text):
     # lowercase
     text = text.lower()
 
@@ -74,6 +73,44 @@ def process_text(text):
 
     return text
 
+def process_text_answer(text):
+    # lowercase
+    text = text.lower()
+
+    # 数詞を数字に変換
+    num_word_to_digit = {
+        'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4',
+        'five': '5', 'six': '6', 'seven': '7', 'eight': '8', 'nine': '9',
+        'ten': '10'
+    }
+    for word, digit in num_word_to_digit.items():
+        text = text.replace(word, digit)
+
+    # 小数点のピリオドを削除する
+    text = re.sub(r'(?<!\d)\.(?!\d)', '', text)
+
+    # 冠詞の削除
+    text = re.sub(r'\b(a|an|the)\b', '', text)
+
+    # 短縮形のカンマの追加
+    contractions = {
+        "dont": "don't", "isnt": "isn't", "arent": "aren't", "wont": "won't",
+        "cant": "can't", "wouldnt": "wouldn't", "couldnt": "couldn't"
+    }
+    for contraction, correct in contractions.items():
+        text = text.replace(contraction, correct)
+
+    # 句読点をスペースに変換
+    text = re.sub(r"[^\w\s':]", ' ', text)
+
+    # 句読点をスペースに変換
+    text = re.sub(r'\s+,', ',', text)
+
+    # 連続するスペースを1つに変換
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    return text
+
 # 1. データローダーの作成
 class VQADataset(torch.utils.data.Dataset):
     def __init__(self, df_path, image_dir, transform=None, answer=True):
@@ -90,7 +127,7 @@ class VQADataset(torch.utils.data.Dataset):
 
         # 質問文に含まれる単語を辞書に追加
         for question in self.df["question"]:
-            question = process_text(question)
+            question = process_text_question(question)
             words = question.split(" ")
             for word in words:
                 if word not in self.question2idx:
@@ -102,7 +139,7 @@ class VQADataset(torch.utils.data.Dataset):
             for answers in self.df["answers"]:
                 for answer in answers:
                     word = answer["answer"]
-                    word = process_text(word)
+                    word = process_text_answer(word)
                     if word not in self.answer2idx:
                         self.answer2idx[word] = len(self.answer2idx)
             self.idx2answer = {v: k for k, v in self.answer2idx.items()}  # 逆変換用の辞書(answer)
@@ -144,7 +181,7 @@ class VQADataset(torch.utils.data.Dataset):
         image = Image.open(f"{self.image_dir}/{self.df['image'][idx]}")
         image = self.transform(image)
         question = np.zeros(len(self.idx2question) + 1)  # 未知語用の要素を追加
-        question_words = process_text(self.df["question"][idx])
+        question_words = process_text_question(self.df["question"][idx])
         for word in question_words:
             try:
                 question[self.question2idx[word]] = 1  # one-hot表現に変換
@@ -152,7 +189,7 @@ class VQADataset(torch.utils.data.Dataset):
                 question[-1] = 1  # 未知語
 
         if self.answer:
-            answers = [self.answer2idx[process_text(answer["answer"])] for answer in self.df["answers"][idx]]
+            answers = [self.answer2idx[process_text_answer(answer["answer"])] for answer in self.df["answers"][idx]]
             mode_answer_idx = mode(answers)  # 最頻値を取得（正解ラベル）
 
             return image, torch.Tensor(question), torch.Tensor(answers), int(mode_answer_idx)
