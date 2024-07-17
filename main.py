@@ -35,7 +35,7 @@ def process_text(text):
     for word, digit in num_word_to_digit.items():
         text = text.replace(word, digit)
 
-    # 小数点のピリオドを削除
+    # 小数点のピリオドを削除する
     text = re.sub(r'(?<!\d)\.(?!\d)', '', text)
 
     # 冠詞の削除
